@@ -13,26 +13,26 @@ export default function UC2() {
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
 
-  const load = async () => {
+  const load = async () => { //backenden data çekme (club)
     const { data } = await api.get('/api/clubs');
     setClubs(data);
   };
 
   useEffect(() => { load().catch(()=>{}); }, []);
 
-  const join = async (id) => {
+  const join = async (id) => { //cluba katılma
     setMsg('');
     try { await api.post('/api/clubs/join', { clubId: id }); await load(); setMsg('Kulübe katıldınız.'); }
     catch (e) { setMsg(e.response?.data?.message || 'Katılım hatası'); }
   };
 
-  const leave = async (id) => {
+  const leave = async (id) => { //clubdan ayrılma
     setMsg('');
     try { await api.post('/api/clubs/leave', { clubId: id }); await load(); setMsg('Kulüpten ayrıldınız.'); }
     catch (e) { setMsg(e.response?.data?.message || 'Ayrılma hatası'); }
   };
 
-  const createClub = async (e) => {
+  const createClub = async (e) => { //admins için club olusturma
     e.preventDefault();
     setMsg('');
     try { 
@@ -43,7 +43,7 @@ export default function UC2() {
     }
   };
 
-  const filtered = clubs.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()));
+  const filtered = clubs.filter(c => c.name.toLowerCase().includes(filter.toLowerCase())); // filtre olusturma
 
   return (
     <div>

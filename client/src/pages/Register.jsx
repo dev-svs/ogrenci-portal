@@ -4,24 +4,24 @@ import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 
 export default function Register() {
-  const [username, setU] = useState('');
-  const [email, setE] = useState('');
+  const [username, setU] = useState(''); //kullanıcıdan username gibi bilgileri 
+  const [email, setE] = useState('');    //kayıt için toplanır
   const [password, setP] = useState('');
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const navigate = useNavigate();
 
-  const onSubmit = async (e) => {
+  const onSubmit = async (e) => { //bsckend olumlu dönüşünde kayıt mesajı döner
     e.preventDefault();
     setErr(''); setOk('');
     try {
       await api.post('/api/auth/register', { username, email, password, roles: ['student'] });
       setOk('Kayıt başarılı, giriş sayfasına yönlendiriliyorsunuz...');
-      setTimeout(()=>navigate('/login'), 900);
+      setTimeout(()=>navigate('/login'), 900); //to ile login sayfasına gönderilir
     } catch (e) {
       setErr(e.response?.data?.message || 'Kayıt başarısız');
     }
-  };
+  }; // hata durumunda hata mesajı gönderilir
 
   return (
     <Container style={{ maxWidth: 480 }}>

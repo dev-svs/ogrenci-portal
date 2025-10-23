@@ -1,26 +1,26 @@
-import { useState } from 'react';
+import { useState } from 'react'; 
 import { Form, Button, Card, Container } from 'react-bootstrap';
 import api from '../api/axios';
 import { useAuth } from '../auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
-  const [emailOrUsername, setId] = useState('');
-  const [password, setPw] = useState('');
+  const [emailOrUsername, setId] = useState(''); //form alanları, hata mesajı tutulur
+  const [password, setPw] = useState('');        //email, username, pass gibi
   const [err, setErr] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
+  const onSubmit = async (e) => { //tetiklendiğinde api.post
+    e.preventDefault();           //('/api/auth/login') ile backend’e istek atılır.
     setErr('');
     try {
-      const { data } = await api.post('/api/auth/login', { emailOrUsername, password });
-      login(data.user, data.token);
-      navigate('/');
+      const { data } = await api.post('/api/auth/login', { emailOrUsername, password }); //backend isteği ok ise;
+      login(data.user, data.token); //login() fonksiyonu çağrılır → AuthContext’e kullanıcı ve token kaydedilir.
+      navigate('/'); //anasayfaya yönlendirilir.
     } catch (e) {
       setErr(e.response?.data?.message || 'Giriş başarısız');
-    }
+    } // hata durumunda kullanıcıya mesaj gösterilir
   };
 
   return (

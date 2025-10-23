@@ -7,11 +7,11 @@ import UC5 from './uc5_CounselorMail.jsx';
 import UC6 from './uc6_Appointments.jsx';
 import UC7 from './uc7_StudentInfo.jsx';
 import UC8 from './uc8_SmartSuggest.jsx';
-
+//) Her UC bileşeni (ör. UC1, UC2...) import edilir.
 export default function Dashboard() {
-  return (
+  return ( // başlangıçta default olan sekme uc1
     <Container>
-      <Tabs defaultActiveKey="uc1" className="mb-3">
+      <Tabs defaultActiveKey="uc1" className="mb-3"> 
         <Tab eventKey="uc1" title="UC-1 Listeleme/Oylama"><UC1/></Tab>
         <Tab eventKey="uc2" title="UC-2 Kulüpler"><UC2/></Tab>
         <Tab eventKey="uc3" title="UC-3 Öneri"><UC3/></Tab>
@@ -22,5 +22,7 @@ export default function Dashboard() {
         <Tab eventKey="uc8" title="UC-8 Akıllı Öneri"><UC8/></Tab>
       </Tabs>
     </Container>
-  );
+  ); // Kullanıcı sekme değiştirince ilgili UC bileşeni aktif hale gelir
 }
+//Tabs bileşeni sekmeli yapının dış iskeletidir; 
+//her sekme ise bir Tab bileşeni olarak gösterilir.

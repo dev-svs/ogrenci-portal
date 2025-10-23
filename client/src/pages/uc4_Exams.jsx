@@ -30,7 +30,7 @@ export default function UC4() {
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
 
-  const load = async () => {
+  const load = async () => { //backend data çekme
     const params = { mine, from: from || undefined, to: to || undefined, q: q || undefined };
     const { data } = await api.get('/api/exams', { params });
     setRows(data);
@@ -38,13 +38,13 @@ export default function UC4() {
 
   useEffect(() => { load().catch(()=>{}); }, []); // ilk yükleme
 
-  const search = async (e) => {
+  const search = async (e) => { //arama olusturma
     e?.preventDefault();
     setMsg('');
     await load();
   };
 
-  const createExam = async (e) => {
+  const createExam = async (e) => { //adminler için sınav olusturma
     e.preventDefault();
     setMsg('');
     try {
@@ -61,7 +61,7 @@ export default function UC4() {
     }
   };
 
-  const remove = async (id) => {
+  const remove = async (id) => { //ad için sınav silme
     if (!confirm('Silmek istediğine emin misin?')) return;
     setMsg('');
     try {
