@@ -45,3 +45,12 @@ app.use('/api/clubs', clubsRoutes);
 
 const examsRoutes = require('./routes/exams.routes');
 app.use('/api/exams', examsRoutes);
+
+const counselRoutes = require('./routes/counsel.routes');
+app.use('/api/counsel', counselRoutes);
+
+const apptRoutes = require('./routes/appt.routes');
+app.use('/api/appts', apptRoutes);
+
+const eventsRoutes = require('./routes/events.routes');
+app.use('/api/events', eventsRoutes);

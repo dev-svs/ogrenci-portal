@@ -13,7 +13,7 @@ router.get('/votes/summary', requireAuth, c.voteSummary);
 
 // names
 router.get('/names', requireAuth, c.listNames);
-router.post('/names/upload', requireAuth, requireRole('admin'), upload.single('file'), c.uploadNamesCsv);
+router.get('/names.csv', requireAuth, requireRole('admin','clubadmin'), c.exportNamesCsv);
 router.get('/names/export', requireAuth, c.exportNamesCsv);
 
 module.exports = router;

@@ -11,7 +11,7 @@ export default function Register() {
   const [ok, setOk] = useState('');
   const navigate = useNavigate();
 
-  const onSubmit = async (e) => { //bsckend olumlu dönüşünde kayıt mesajı döner
+  const onSubmit = async (e) => { //backend olumlu dönüşünde kayıt mesajı döner
     e.preventDefault();
     setErr(''); setOk('');
     try {

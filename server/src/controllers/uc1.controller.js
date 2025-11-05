@@ -49,9 +49,11 @@ exports.voteSummary = async (_req, res, next) => {
 };
 
 // NAMES
-exports.listNames = async (_req, res, next) => {
+exports.listNames = async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT id, full_name, created_at FROM uc1_names ORDER BY id DESC');
+    const [rows] = await pool.query(
+      `SELECT u.id, u.username, u.email FROM users u ORDER BY u.username`
+    );
     res.json(rows);
   } catch (e) { next(e); }
 };
@@ -70,12 +72,19 @@ exports.uploadNamesCsv = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-exports.exportNamesCsv = async (_req, res, next) => {
+exports.exportNamesCsv = async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT full_name FROM uc1_names ORDER BY id ASC');
-    const csv = rows.map(r => r.full_name).join('\n') + '\n';
+    const [rows] = await pool.query(
+      `SELECT u.id, u.username, u.email FROM users u ORDER BY u.username`
+    );
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="uc1_names.csv"');
-    res.send(csv);
+    res.setHeader('Content-Disposition', 'attachment; filename="isim_listesi.csv"');
+    res.write('id,username,email\n');
+    for (const r of rows) {
+      // basit CSV kaçışı
+      const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+      res.write([esc(r.id), esc(r.username), esc(r.email)].join(',') + '\n');
+    }
+    res.end();
   } catch (e) { next(e); }
 };
