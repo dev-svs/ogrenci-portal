@@ -1,23 +1,29 @@
 // client/src/pages/uc6_Appointments.jsx
 import { useEffect, useMemo, useState } from 'react';
-import { Row, Col, Card, Button, Form, Table, Alert, InputGroup } from 'react-bootstrap';
+import { Row, Col, Card, Button, Form, Table, Alert, Badge, Spinner } from 'react-bootstrap';
 import api from '../api/axios';
 import { useAuth } from '../auth/AuthContext';
+import { toLocal, parseUtcLike, pad } from '../utils/time'; // 🔹 ortak zaman yardımcıları
+import { useAutoDismiss } from '../utils/ui';
 
-function toLocal(dtUtcStr) {
-  const d = new Date(dtUtcStr);
-  return d.toLocaleString();
-}
-function utcToLocalInput(dtUtcStr) {
-  // "YYYY-MM-DDTHH:mm" string (local input formatı)
-  const d = new Date(dtUtcStr);
-  const pad = (n) => String(n).padStart(2,'0');
-  const y = d.getFullYear();
-  const m = pad(d.getMonth()+1);
-  const day = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  return `${y}-${m}-${day}T${hh}:${mm}`;
+
+// Gün için 30 dk slotları üret (SABİT: 09:00–18:00)
+function generateDaySlots(day, minutes=30) {
+  if (!day) return [];
+  const sH=9, sM=0, eH=18, eM=0;
+  const slots = [];
+  const start = new Date(`${day}T${pad(sH)}:${pad(sM)}:00`);
+  const end   = new Date(`${day}T${pad(eH)}:${pad(eM)}:00`);
+  for (let t = new Date(start); t < end; t = new Date(t.getTime() + minutes*60000)) {
+    const t2 = new Date(t.getTime() + minutes*60000);
+    slots.push({
+      key: `${pad(t.getHours())}:${pad(t.getMinutes())}`,
+      label: `${pad(t.getHours())}:${pad(t.getMinutes())} - ${pad(t2.getHours())}:${pad(t2.getMinutes())}`,
+      startLocal: `${day}T${pad(t.getHours())}:${pad(t.getMinutes())}`,
+      endLocal:   `${day}T${pad(t2.getHours())}:${pad(t2.getMinutes())}`,
+    });
+  }
+  return slots;
 }
 
 export default function UC6() {
@@ -33,15 +39,18 @@ export default function UC6() {
 
   // Bildirim
   const [msg, setMsg]     = useState('');
+  useAutoDismiss(msg, setMsg, 3000);
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [loadingProviders, setLoadingProviders] = useState(false);
 
   // Randevu alma formu
   const [providers, setProviders]   = useState([]);
   const [providerId, setProviderId] = useState('');
   const [day, setDay]               = useState(''); // YYYY-MM-DD
-  const [slots, setSlots]           = useState([]);
-  const [startLocal, setStartLocal] = useState('');
-  const [endLocal, setEndLocal]     = useState('');
+  const [available, setAvailable]   = useState([]); // [{start_utc,end_utc}]
   const [topic, setTopic]           = useState('');
+  const [selected, setSelected]     = useState(null); // {startLocal,endLocal,label}
 
   // Sağlayıcı uygunluk yönetimi (sadece provider rolleri)
   const [myAvails, setMyAvails] = useState([]);
@@ -51,24 +60,39 @@ export default function UC6() {
 
   /* ---------------------- Data Loaders ---------------------- */
 
-  const loadAppts = async () => {
+  const loadAppts = async () => {setLoadingList(true);
+  try {
     const params = { scope, from: from || undefined, to: to || undefined };
     const { data } = await api.get('/api/appts', { params });
     setRows(data);
+  } finally {
+    setLoadingList(false);
+  }    
   };
 
-  const loadProviders = async () => {
+  const loadProviders = async () => {setLoadingProviders(true);
+  try {
     const { data } = await api.get('/api/appts/providers');
     setProviders(data);
+  } finally {
+    setLoadingProviders(false);
+  }
+    
   };
 
   const loadSlots = async () => {
-    setSlots([]);
-    if (!providerId || !day) return;
+    setAvailable([]);
+  setSelected(null);
+  if (!providerId || !day) return;
+  setLoadingSlots(true);
+  try {
     const { data } = await api.get('/api/appts/slots', {
       params: { provider_id: providerId, day, minutes: 30 },
     });
-    setSlots(data);
+    setAvailable(data || []);
+  } finally {
+    setLoadingSlots(false);
+  }
   };
 
   const loadMyAvails = async () => {
@@ -97,25 +121,20 @@ export default function UC6() {
     await loadAppts();
   };
 
-  const pickSlot = (s) => {
-    setStartLocal(utcToLocalInput(s.start_utc));
-    setEndLocal(utcToLocalInput(s.end_utc));
-  };
-
-  const book = async (e) => {
-    e.preventDefault();
+  const confirmBooking = async () => {
+    if (!selected || !providerId) return;
     setMsg('');
     try {
       await api.post('/api/appts/book', {
         provider_id: Number(providerId),
-        start_local: startLocal,
-        end_local: endLocal,
+        start_local: selected.startLocal,
+        end_local: selected.endLocal,
         topic,
       });
       setTopic('');
-      await loadAppts();
-      await loadSlots();
-      setMsg('Randevu oluşturuldu (e-posta bildirimi yapılandırılmışsa gönderildi).');
+      setSelected(null);
+      await Promise.all([loadAppts(), loadSlots()]);
+      setMsg(`Randevu oluşturuldu: ${selected.label}`);
     } catch (err) {
       setMsg(err.response?.data?.message || 'Randevu alma hatası');
     }
@@ -126,9 +145,8 @@ export default function UC6() {
     setMsg('');
     try {
       await api.post('/api/appts/cancel', { id });
-      await loadAppts();
-      await loadSlots();
-      setMsg('Randevu iptal edildi (e-posta bildirimi yapılandırılmışsa gönderildi).');
+      await Promise.all([loadAppts(), loadSlots()]);
+      setMsg('Randevu iptal edildi.');
     } catch (err) {
       setMsg(err.response?.data?.message || 'İptal hatası');
     }
@@ -145,8 +163,7 @@ export default function UC6() {
         note: aNote,
       });
       setAStart(''); setAEnd(''); setANote('');
-      await loadMyAvails();
-      await loadSlots();
+      await Promise.all([loadMyAvails(), loadSlots()]);
       setMsg('Uygunluk eklendi.');
     } catch (err) {
       setMsg(err.response?.data?.message || 'Uygunluk eklenemedi');
@@ -158,8 +175,7 @@ export default function UC6() {
     setMsg('');
     try {
       await api.delete(`/api/appts/my-avails/${id}`);
-      await loadMyAvails();
-      await loadSlots();
+      await Promise.all([loadMyAvails(), loadSlots()]);
       setMsg('Uygunluk silindi.');
     } catch (err) {
       setMsg(err.response?.data?.message || 'Silme hatası');
@@ -168,16 +184,33 @@ export default function UC6() {
 
   /* ---------------------- Derived ---------------------- */
 
-  const providerListFromRows = useMemo(() => {
-    // Liste tablosundan da sağlayıcı türet; providers boş kalırsa fallback olur
-    const m = new Map();
-    rows.forEach((r) => m.set(r.provider_id, r.provider_name));
-    return Array.from(m, ([id, name]) => ({ id, name }));
-  }, [rows]);
+  // Günlük 30 dk’lık tüm slotlar
+  const daySlots = useMemo(() => generateDaySlots(day, 30), [day]);
 
-  const effectiveProviders = providers.length
-    ? providers.map((p) => ({ id: p.id, name: `${p.username} (${p.email})` }))
-    : providerListFromRows;
+  // Backend’ten gelen uygun slotların set’i (UTC normalize)
+  const availableSet = useMemo(() => {
+    const set = new Set();
+    for (const s of available) set.add(parseUtcLike(s.start_utc).toISOString());
+    return set;
+  }, [available]);
+
+  // daySlots’u “uygun”/“değil” + “seçili” olarak işaretle
+  const decoratedSlots = useMemo(() => {
+      const now = new Date();
+      const isToday = day && day === now.toISOString().slice(0,10);
+      return daySlots.map(s => {
+      const iso = new Date(s.startLocal).toISOString(); // local→UTC ISO
+      const isFree = availableSet.has(iso);
+      const isSelected = !!selected && selected.startLocal === s.startLocal;
+      let isPast = false;
+    if (isToday) {
+      // s.startLocal yerel; şimdi ile kıyasla
+      const localStart = new Date(s.startLocal);
+      isPast = localStart.getTime() < now.getTime();
+    }
+    return { ...s, isFree, isSelected, isPast };
+    });
+  }, [daySlots, availableSet, selected]);
 
   /* ---------------------- Render ---------------------- */
 
@@ -246,7 +279,11 @@ export default function UC6() {
                       </td>
                     </tr>
                   ))}
-                  {!rows.length && (
+                    {loadingList ? (
+                                 <tr><td colSpan={8} className="text-center">
+                               <Spinner animation="border" size="sm" /> <span className="ms-2 text-muted">Yükleniyor...</span>
+                              </td></tr>
+                        ) : !rows.length && (
                     <tr><td colSpan={8} className="text-center text-muted">Kayıt yok</td></tr>
                   )}
                 </tbody>
@@ -255,13 +292,13 @@ export default function UC6() {
           </Card>
         </Col>
 
-        {/* SAĞ: Randevu alma + Uygunluk yönetimi */}
+        {/* SAĞ: Slot Seç → Onayla + Uygunluk yönetimi */}
         <Col md={5}>
           <Card>
             <Card.Body>
               <Card.Title>Yeni Randevu Al</Card.Title>
 
-              <Form onSubmit={book}>
+              <Form className="mb-3">
                 <Form.Group className="mb-2">
                   <Form.Label>Sağlayıcı</Form.Label>
                   <Form.Select
@@ -269,85 +306,77 @@ export default function UC6() {
                     onChange={(e)=>setProviderId(e.target.value)}
                     required
                   >
-                    <option value="">Seçiniz...</option>
-                    {effectiveProviders.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                    <option value="">{loadingProviders ? 'Yükleniyor...' : 'Seçiniz...'}</option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.username} ({p.email})</option>
                     ))}
                   </Form.Select>
                 </Form.Group>
 
-                <Row className="g-2 mb-2">
-                  <Col>
-                    <Form.Label>Gün</Form.Label>
-                    <Form.Control
-                      type="date"
-                      value={day}
-                      onChange={(e)=>setDay(e.target.value)}
-                      required
-                    />
-                  </Col>
-                </Row>
-
-                <div className="mb-2">
-                  <div className="mb-1">Uygun Slotlar (30 dk)</div>
-                  {slots.length ? (
-                    <div className="d-flex flex-wrap gap-2">
-                      {slots.map((s,i) => (
-                        <Button
-                          key={i}
-                          size="sm"
-                          variant="outline-primary"
-                          onClick={()=>pickSlot(s)}
-                          title={`${new Date(s.start_utc).toLocaleString()} - ${new Date(s.end_utc).toLocaleString()}`}
-                        >
-                          {new Date(s.start_utc).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                          {' - '}
-                          {new Date(s.end_utc).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                        </Button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-muted small">
-                      Seçtiğiniz gün için uygun slot bulunamadı.
-                    </div>
-                  )}
-                </div>
-
-                <Row className="g-2 mb-2">
-                  <Col>
-                    <Form.Label>Başlangıç</Form.Label>
-                    <Form.Control
-                      type="datetime-local"
-                      value={startLocal}
-                      onChange={(e)=>setStartLocal(e.target.value)}
-                      required
-                    />
-                  </Col>
-                  <Col>
-                    <Form.Label>Bitiş</Form.Label>
-                    <Form.Control
-                      type="datetime-local"
-                      value={endLocal}
-                      onChange={(e)=>setEndLocal(e.target.value)}
-                      required
-                    />
-                  </Col>
-                </Row>
+                <Form.Group className="mb-2">
+                  <Form.Label>Gün</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={day}
+                    onChange={(e)=>setDay(e.target.value)}
+                    required
+                    min={new Date().toISOString().slice(0,10)}
+                  />
+                </Form.Group>
 
                 <Form.Group className="mb-3">
                   <Form.Label>Konu</Form.Label>
                   <Form.Control
                     value={topic}
                     onChange={(e)=>setTopic(e.target.value)}
-                    placeholder="Kısa açıklama"
+                    placeholder="Kısa açıklama (opsiyonel)"
                   />
                 </Form.Group>
-
-                <Button type="submit">Randevu Al</Button>
               </Form>
 
-              <div className="small text-muted mt-2">
-                Slot’a tıklayınca saatler otomatik dolar. Saatler yerelde girilir, sunucuda UTC tutulur.
+              <div className="mb-2 d-flex align-items-center gap-2">
+                <Badge bg="success">Uygun</Badge>
+                <Badge bg="secondary">Dolu / Uygun değil</Badge>
+                <Badge bg="primary">Seçili</Badge>
+              </div>
+
+              {/* Slot grid */}
+              <div className="d-flex flex-wrap gap-2">
+                {loadingSlots ? (
+                    <div className="text-muted"><Spinner animation="border" size="sm" /> <span className="ms-2">Slotlar yükleniyor...</span></div>
+                   ) : decoratedSlots.length ? (
+                  decoratedSlots.map((s) => {
+                    const variant = s.isSelected ? 'primary' : (s.isFree ? 'success' : 'secondary');
+                    const disabled = !s.isFree || !providerId || !day;
+                    const finalDisabled = disabled || s.isPast;
+                    return (
+                      <Button
+                        key={s.key}
+                        size="sm"
+                        variant={variant}
+                        disabled={finalDisabled}
+                        onClick={() => setSelected(s)}
+                        title={s.label}
+                      >
+                        {s.label}
+                      </Button>
+                    );
+                  })
+                ) : (
+                  <div className="text-muted">Gün ve sağlayıcı seçiniz.</div>
+                )}
+              </div>
+
+              <div className="d-flex justify-content-between align-items-center mt-3">
+                <div className="small text-muted">
+                  Slot seçtikten sonra onaylayın. Yerelde girilir, sunucu UTC tutar.
+                </div>
+                <Button
+                  onClick={confirmBooking}
+                  disabled={!selected || !providerId || !day}
+                >
+                  Randevuyu Onayla
+                </Button>
               </div>
             </Card.Body>
           </Card>
@@ -391,7 +420,7 @@ export default function UC6() {
 
                 <hr/>
 
-                <Table hover responsive size="sm">
+                <Table hover responsive size="sm" className="align-middle">
                   <thead>
                     <tr>
                       <th>#</th>
@@ -405,8 +434,8 @@ export default function UC6() {
                     {myAvails.map((a) => (
                       <tr key={a.id}>
                         <td>{a.id}</td>
-                        <td>{new Date(a.start_utc).toLocaleString()}</td>
-                        <td>{new Date(a.end_utc).toLocaleString()}</td>
+                        <td>{toLocal(a.start_utc)}</td>
+                        <td>{toLocal(a.end_utc)}</td>
                         <td className="text-muted">{a.note || '-'}</td>
                         <td className="text-end">
                           <Button

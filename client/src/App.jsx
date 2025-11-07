@@ -1,21 +1,32 @@
-import { Routes, Route } from 'react-router-dom';
-import TopNav from './components/TopNav.jsx';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import Dashboard from './pages/Dashboard.jsx';
+import React, { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './auth/PrivateRoute.jsx';
+
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const Login     = lazy(() => import('./pages/Login.jsx'));
+const NotFound  = lazy(() => import('./pages/NotFound.jsx'));
 
 export default function App() {
   return (
-    <>
-      <TopNav/>
+    <Suspense fallback={
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div>
+        <div className="mt-2 text-muted">Yükleniyor...</div>
+      </div>
+    }>
       <Routes>
-        <Route element={<PrivateRoute/>}>
-          <Route path="/" element={<Dashboard/>}/>
-        </Route>
-        <Route path="/login" element={<Login/>}/>
-        <Route path="/register" element={<Register/>}/>
+        {/* Public */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Protected */}
+        <Route path="/dashboard/*" element={
+          <PrivateRoute>
+            <Dashboard />
+          </PrivateRoute>
+        }/>
+        {/* 404 */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
-    </>
+    </Suspense>
   );
 }

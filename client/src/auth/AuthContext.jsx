@@ -1,31 +1,42 @@
-/*Bu dosya, React Context API kullanarak uygulamanın genelinde oturum 
-(login/logout) bilgisini yönetir.*/
+import { createContext, useContext, useEffect, useState } from 'react';
+import api from '../api/axios';
 
-import { createContext, useContext, useState } from 'react';
+const AuthContext = createContext(null);
 
-const AuthContext = createContext(null); //ile AuthContext olusturulur
-export const useAuth = () => useContext(AuthContext);
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
 
-function safeParse(json) {
-  try { return JSON.parse(json); } catch { return null; }
-}
+  useEffect(() => {
+    const rawUser = localStorage.getItem('user');
+    const token = localStorage.getItem('token');
+    if (rawUser && token) {
+      try { setUser(JSON.parse(rawUser)); } catch {}
+    }
+  }, []);
 
-export default function AuthProvider({ children }) { //çocuk bilesenlere 
-  const [user, setUser] = useState(() => {           //kullanıcı bilgisini saklar.
-    const u = localStorage.getItem('user');
-    return u ? safeParse(u) : null;
-  });
-
-  const login = (userObj, token) => {
-    localStorage.setItem('user', JSON.stringify(userObj));
-    localStorage.setItem('token', token);
-    setUser(userObj);
-  }; //kullanıcı verisini ve jwt tokeni lclstrg e kaydeder.
+  // BE /api/auth/login ==> { emailOrUsername, password } (JSON)
+  const login = async (emailOrUsername, password) => {
+    const body = {
+      emailOrUsername: (emailOrUsername || '').trim(),
+      password: (password || '').trim(),
+    };
+    const { data } = await api.post('/api/auth/login', body, {
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    });
+    if (!data?.token || !data?.user) {
+      throw new Error('Login cevabı beklenen formatta değil: { token, user }');
+    }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data.user;
+  };
 
   const logout = () => {
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem('token'); 
-    setUser(null); //bilgileri siler oturumu kapatır
+    setUser(null);
+    window.location.replace('/login');
   };
 
   return (
@@ -34,5 +45,6 @@ export default function AuthProvider({ children }) { //çocuk bilesenlere
     </AuthContext.Provider>
   );
 }
-// kimlik yönetim merkezi
-// giriş, çıkış, oturum bilgisini kontrol eder.
+
+export const useAuth = () => useContext(AuthContext);
+export default AuthProvider;

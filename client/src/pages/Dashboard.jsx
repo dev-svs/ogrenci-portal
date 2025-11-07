@@ -1,28 +1,32 @@
-import { Tabs, Tab, Container } from 'react-bootstrap';
+// client/src/pages/Dashboard.jsx
+import { Container } from 'react-bootstrap';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import TopNav from '../components/TopNav.jsx';
+
+// UC sayfaların importları
 import UC1 from './uc1_ListVote.jsx';
 import UC2 from './uc2_Clubs.jsx';
 import UC3 from './uc3_Recommendations.jsx';
 import UC4 from './uc4_Exams.jsx';
 import UC5 from './uc5_CounselorMail.jsx';
 import UC6 from './uc6_Appointments.jsx';
-import UC7 from './uc7_StudentInfo.jsx';
-import UC8 from './uc8_SmartSuggest.jsx';
-//) Her UC bileşeni (ör. UC1, UC2...) import edilir.
+
 export default function Dashboard() {
-  return ( // başlangıçta default olan sekme uc1
-    <Container>
-      <Tabs defaultActiveKey="uc1" className="mb-3"> 
-        <Tab eventKey="uc1" title="UC-1 Listeleme/Oylama"><UC1/></Tab>
-        <Tab eventKey="uc2" title="UC-2 Kulüpler"><UC2/></Tab>
-        <Tab eventKey="uc3" title="UC-3 Öneri"><UC3/></Tab>
-        <Tab eventKey="uc4" title="UC-4 Sınav Takvimi"><UC4/></Tab>
-        <Tab eventKey="uc5" title="UC-5 Danışman Mail"><UC5/></Tab>
-        <Tab eventKey="uc6" title="UC-6 Randevu"><UC6/></Tab>
-        <Tab eventKey="uc7" title="UC-7 Öğrenci Bilgileri"><UC7/></Tab>
-        <Tab eventKey="uc8" title="UC-8 Akıllı Öneri"><UC8/></Tab>
-      </Tabs>
-    </Container>
-  ); // Kullanıcı sekme değiştirince ilgili UC bileşeni aktif hale gelir
+  return (
+    <>
+      <TopNav />  {/* ✅ güncel isim */}
+      <Container className="py-3">
+        <Routes>
+          <Route index element={<Navigate to="uc1" replace />} />
+          <Route path="uc1" element={<UC1 />} />
+          <Route path="uc2" element={<UC2 />} />
+          <Route path="uc3" element={<UC3 />} />
+          <Route path="uc4" element={<UC4 />} />
+          <Route path="uc5" element={<UC5 />} />
+          <Route path="uc6" element={<UC6 />} />
+          <Route path="*" element={<Navigate to="uc1" replace />} />
+        </Routes>
+      </Container>
+    </>
+  );
 }
-//Tabs bileşeni sekmeli yapının dış iskeletidir; 
-//her sekme ise bir Tab bileşeni olarak gösterilir.

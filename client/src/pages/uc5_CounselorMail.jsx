@@ -94,7 +94,7 @@ export default function UC5() {
             <Card.Body>
               <Card.Title>Mesajlarım</Card.Title>
               <Table hover responsive>
-                <thead><tr><th>#</th><th>Konu</th><th>Danışman</th><th>Kimden</th><th>Tarih</th><th></th></tr></thead>
+                <thead><tr><th>No</th><th>Konu</th><th>Danışman</th><th>Kimden</th><th>Tarih</th><th></th></tr></thead>
                 <tbody>
                   {threads.map(t => (
                     <tr key={t.id}>

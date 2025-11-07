@@ -14,7 +14,8 @@ const app = express();
 app.use('/api/uc1', uc1Routes);
 
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 
@@ -54,3 +55,6 @@ app.use('/api/appts', apptRoutes);
 
 const eventsRoutes = require('./routes/events.routes');
 app.use('/api/events', eventsRoutes);
+
+const usersRoutes = require('./routes/users.routes');
+app.use('/api/users', usersRoutes);

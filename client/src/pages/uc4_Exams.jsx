@@ -122,7 +122,7 @@ export default function UC4() {
               <Table hover responsive size="sm">
                 <thead>
                   <tr>
-                    <th>#</th><th>Ders</th><th>Başlık</th><th>Başlangıç</th><th>Bitiş</th><th>Yer</th><th></th>
+                    <th>No</th><th>Ders</th><th>Başlık</th><th>Başlangıç</th><th>Bitiş</th><th>Yer</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -190,7 +190,7 @@ export default function UC4() {
             <Card><Card.Body>
               <Card.Title>Bilgi</Card.Title>
               <p className="text-muted mb-0">
-                Sınav eklemek/silmek için <b>admin</b>, <b>instructor</b> veya <b>student_affairs</b> rolü gerekir.
+                Sınav bilgileri <b>admin</b>, <b>eğitmen</b> veya <b>öğrenci işleri</b> tarafından belirlenir.
               </p>
             </Card.Body></Card>
           )}

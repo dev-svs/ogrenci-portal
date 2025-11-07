@@ -1,9 +1,8 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from './AuthContext';
-// useAuth() ile context’ten user alınır.
-// user mevcutsa <Outlet/> döner
+// client/src/auth/PrivateRoute.jsx
+import { Navigate } from 'react-router-dom';
 
-export default function PrivateRoute() {
-  const { user } = useAuth();
-  return user ? <Outlet/> : <Navigate to="/login" replace />;
-} //user yoksa <Navigate to="/login" replace /> ile yönlendirir
+export default function PrivateRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
