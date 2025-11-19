@@ -50,9 +50,20 @@ exports.list = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { title, start_local, location, description, club_id } = req.body;
-    if (!title || !start_local) return res.status(400).json({ message: 'title ve start_local gerekli' });
+    if (!title || !start_local) {
+      return res.status(400).json({ message: 'title ve start_local gerekli' });
+    }
+
     const s = new Date(start_local);
-    if (isNaN(s)) return res.status(400).json({ message: 'Geçersiz tarih' });
+    if (isNaN(s)) {
+      return res.status(400).json({ message: 'Geçersiz tarih' });
+    }
+
+    // 🔴 Geçmiş tarih/saat kontrolü (server-side)
+    const now = new Date();
+    if (s < now) {
+      return res.status(400).json({ message: 'Geçmiş tarih/saat için etkinlik oluşturamazsınız.' });
+    }
 
     const sUtc = toMySqlDateTime(s);
     const [r] = await pool.query(
@@ -63,6 +74,7 @@ exports.create = async (req, res, next) => {
     res.status(201).json({ id: r.insertId });
   } catch (e) { next(e); }
 };
+
 
 // DELETE /api/events/:id
 exports.remove = async (req, res, next) => {

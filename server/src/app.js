@@ -58,3 +58,6 @@ app.use('/api/events', eventsRoutes);
 
 const usersRoutes = require('./routes/users.routes');
 app.use('/api/users', usersRoutes);
+
+const suggestionsRoutes = require('./routes/suggestions.routes');
+app.use('/api/suggestions', suggestionsRoutes);

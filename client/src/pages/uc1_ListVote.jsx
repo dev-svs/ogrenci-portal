@@ -129,6 +129,13 @@ export default function UC1() {
       )
     : past;
 
+    // Bugünün yerel zamanı için min değer (datetime-local uyumlu)
+const now = new Date();
+const tzOffsetMs = now.getTimezoneOffset() * 60000; // dakikayı ms’e çevir
+const localNow = new Date(now.getTime() - tzOffsetMs);
+const minDateTimeLocal = localNow.toISOString().slice(0, 16);
+
+
   return (
     <div>
       {msg && <Alert variant="info">{msg}</Alert>}
@@ -298,7 +305,7 @@ export default function UC1() {
                       value={startLocal}
                       onChange={(e)=>setStartLocal(e.target.value)}
                       required
-                      min={new Date().toISOString().slice(0,16)}
+                      min={minDateTimeLocal}
                     />
                   </Form.Group>
                   <Form.Group className="mb-2">
