@@ -61,3 +61,8 @@ app.use('/api/users', usersRoutes);
 
 const suggestionsRoutes = require('./routes/suggestions.routes');
 app.use('/api/suggestions', suggestionsRoutes);
+
+const aiRoutes = require('./routes/ai.routes');
+const chatbotRoutes = require('./routes/chatbot.routes');
+app.use('/api/ai', aiRoutes);
+app.use('/api/chatbot', chatbotRoutes);

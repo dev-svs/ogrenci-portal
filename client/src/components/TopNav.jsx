@@ -47,6 +47,14 @@ export default function TopNav() {
             <Nav.Link as={NavLink} to="/dashboard/uc3">Öneriler</Nav.Link>
             <Nav.Link as={NavLink} to="/dashboard/uc5">Danışman</Nav.Link>
             <Nav.Link as={NavLink} to="/dashboard/uc6">Randevular</Nav.Link>
+            <Nav.Link 
+                as={NavLink} 
+                to="/dashboard/chatbot"
+                className="d-flex align-items-center"
+              >
+                🤖 Kampüs Asistanı
+              </Nav.Link>
+
           </Nav>
 
           {/* Sağ kısım */}

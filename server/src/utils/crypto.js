@@ -1,40 +1,48 @@
 // server/src/utils/crypto.js
 const crypto = require('crypto');
 
-// .env varsa kullan, yoksa dev ortam için fallback bir key üret
+// .env varsa onu kullan, yoksa dev için sabit bir key
 const RAW_KEY = process.env.COUNSELOR_MSG_KEY || 'dev-fallback-counselor-key';
 
-// AES-256 için 32 byte key gerekiyor; gerekirse hash’le / kes
+// AES-256 için 32 byte key
 const KEY = crypto.createHash('sha256').update(RAW_KEY).digest(); // 32 byte
-const IV_LENGTH = 12; // GCM için 12 byte IV
+const ALGO = 'aes-256-cbc';
+const IV_LENGTH = 16; // 16 byte
 
+// Şifrele: düz metin -> { iv: Buffer(16), data: base64 string }
 function encrypt(plainText) {
   if (plainText == null) plainText = '';
-  const iv = crypto.randomBytes(IV_LENGTH);
 
-  const cipher = crypto.createCipheriv('aes-256-gcm', KEY, iv);
-  const enc = Buffer.concat([
+  const iv = crypto.randomBytes(IV_LENGTH); // Buffer(16)
+  const cipher = crypto.createCipheriv(ALGO, KEY, iv);
+
+  const encrypted = Buffer.concat([
     cipher.update(String(plainText), 'utf8'),
     cipher.final(),
   ]);
-  const tag = cipher.getAuthTag();
 
-  // iv + tag + data -> base64
-  return Buffer.concat([iv, tag, enc]).toString('base64');
+  return {
+    iv,                          // Buffer olarak döndürüyoruz
+    data: encrypted.toString('base64'), // cipher metin string
+  };
 }
 
-function decrypt(payload) {
-  if (!payload) return '';
-  const buf = Buffer.from(payload, 'base64');
+// Çöz: iv (Buffer veya string) + base64 cipher -> düz metin
+function decrypt(iv, dataB64) {
+  if (!iv || !dataB64) return '';
 
-  const iv = buf.subarray(0, IV_LENGTH);
-  const tag = buf.subarray(IV_LENGTH, IV_LENGTH + 16);
-  const data = buf.subarray(IV_LENGTH + 16);
+  const enc = Buffer.from(dataB64, 'base64');
 
-  const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, iv);
-  decipher.setAuthTag(tag);
-  const dec = Buffer.concat([decipher.update(data), decipher.final()]);
-  return dec.toString('utf8');
+  // mysql2 genelde Buffer döndürür ama garanti olsun:
+  const ivBuf = Buffer.isBuffer(iv) ? iv : Buffer.from(iv);
+
+  const decipher = crypto.createDecipheriv(ALGO, KEY, ivBuf);
+  const decrypted = Buffer.concat([
+    decipher.update(enc),
+    decipher.final(),
+  ]);
+
+  return decrypted.toString('utf8');
 }
 
 module.exports = { encrypt, decrypt };

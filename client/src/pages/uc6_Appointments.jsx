@@ -199,7 +199,7 @@ export default function UC6() {
     const set = new Set();
     for (const s of available) {
       const d = parseUtcLike(s.start_utc);
-      if (d) set.add(d.toISOString()); // örn: 2025-11-22T10:00:00.000Z
+      if (d) set.add(d.toISOString());
     }
     return set;
   }, [available]);
@@ -210,9 +210,8 @@ export default function UC6() {
     const isToday = day && day === now.toISOString().slice(0, 10);
 
     return daySlots.map((s) => {
-      // s.startLocal: "YYYY-MM-DDTHH:MM" → TR yerel kabul edilir
-      const localDate = new Date(s.startLocal);
-      const iso = localDate.toISOString(); // UTC'ye çevrilmiş ISO
+      const localDate = new Date(s.startLocal); // TR yerel
+      const iso = localDate.toISOString();      // UTC ISO
       const isFree = availableSet.has(iso);
       const isSelected = !!selected && selected.startLocal === s.startLocal;
 
@@ -363,8 +362,19 @@ export default function UC6() {
                   </div>
                 ) : decoratedSlots.length ? (
                   decoratedSlots.map((s) => {
-                    const variant = s.isSelected ? 'primary' : (s.isFree ? 'success' : 'secondary');
-                    const disabled = !s.isFree || !providerId || !day || s.isPast;
+                    // RENK: geçmiş veya dolu → gri; gelecek + boş → yeşil; seçili → mavi
+                    let variant;
+                    if (s.isSelected) {
+                      variant = 'primary';
+                    } else if (s.isFree && !s.isPast) {
+                      variant = 'success';
+                    } else {
+                      variant = 'secondary';
+                    }
+
+                    const disabled =
+                      !s.isFree || s.isPast || !providerId || !day;
+
                     return (
                       <Button
                         key={s.key}

@@ -10,6 +10,9 @@ import UC3 from "./uc3_Suggestions.jsx";
 import UC5 from "./uc5_CounselorMail.jsx";
 import UC6 from "./uc6_Appointments.jsx";
 
+// Chatbot importu ekliyoruz
+import Chatbot from './Chatbot.jsx';
+
 // Öneriler admin listesi
 import SuggestionsList from "./uc3_SuggestionsList.jsx";
 
@@ -34,7 +37,7 @@ export default function Dashboard() {
           <Route path="uc3" element={<UC3 />} />          {/* ✔ Artık ÖNERİLER */}
           <Route path="uc5" element={<UC5 />} />
           <Route path="uc6" element={<UC6 />} />
-
+          <Route path="chatbot" element={<Chatbot />} />
           {/* Admin öneri listesi */}
           <Route path="suggest-list" element={<SuggestionsList />} />
 
