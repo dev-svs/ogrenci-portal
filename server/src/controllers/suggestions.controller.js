@@ -1,9 +1,10 @@
 // server/src/controllers/suggestions.controller.js
-const pool = require('../config/db');
+const db = require('../config/db'); // sende diğer controllerlar ne kullanıyorsa aynısı
 
 async function create(req, res) {
   try {
-    const userId = req.user?.id || null;
+    const userId = req.user?.id || null; // auth yoksa undefined olur, sorun değil
+
     const {
       category,
       title,
@@ -13,18 +14,26 @@ async function create(req, res) {
     } = req.body;
 
     const filePath = req.file ? req.file.path : null;
-    const anon = is_anonymous === '1' || is_anonymous === 1 || is_anonymous === true;
 
-    await pool.query(
+    const anon =
+      is_anonymous === '1' ||
+      is_anonymous === 1 ||
+      is_anonymous === true ||
+      is_anonymous === 'true';
+
+    const userIdToStore = anon ? null : userId;
+    const emailToStore  = anon ? null : (email || null);
+
+    await db.query(
       `INSERT INTO suggestions (user_id, category, title, description, file_path, email, is_anonymous)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        anon ? null : userId,
+        userIdToStore,
         category,
         title,
         description,
         filePath,
-        anon ? (email || null) : null,
+        emailToStore,
         anon ? 1 : 0,
       ]
     );
@@ -38,7 +47,7 @@ async function create(req, res) {
 
 async function list(req, res) {
   try {
-    const [rows] = await pool.query(
+    const [rows] = await db.query(
       `SELECT s.*, u.username, u.email AS user_email
        FROM suggestions s
        LEFT JOIN users u ON u.id = s.user_id
@@ -51,7 +60,4 @@ async function list(req, res) {
   }
 }
 
-module.exports = {
-  create,
-  list,
-};
+module.exports = { create, list };

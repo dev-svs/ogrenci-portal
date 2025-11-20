@@ -40,21 +40,46 @@ async function hasAvailOverlap(providerId, sUtc, eUtc, ignoreId = null) {
   return rows.length > 0;
 }
 
-function startOfDayUtc(dateStr) {
-  // "YYYY-MM-DD" -> o günün UTC başı
-  return new Date(dateStr + 'T00:00:00Z');
+// TR yerel günü → UTC aralığı
+const TZ_OFFSET_MIN = 3 * 60; // Europe/Istanbul sabit +3
+
+function localDayToUtcRange(dayStr) {
+  // "YYYY-MM-DD" günü TR yerel kabul et, UTC aralığına çevir
+  const [y, m, d] = dayStr.split('-').map(Number);
+  // Bu Date.UTC, o günün UTC gece 00:00'ı
+  const utcMidnight = Date.UTC(y, m - 1, d, 0, 0, 0);
+  // TR'de aynı an, UTC'de 21:00 (bir önceki gün) ⇒ 00:00 TR = 21:00Z
+  const startUtcMs = utcMidnight - TZ_OFFSET_MIN * 60000;
+  const endUtcMs   = startUtcMs + 24 * 60 * 60000 - 1000; // 23:59:59
+  return {
+    startUtc: new Date(startUtcMs),
+    endUtc:   new Date(endUtcMs),
+  };
 }
-function endOfDayUtc(dateStr) {
-  return new Date(dateStr + 'T23:59:59Z');
-}
+
 function addMinutes(d, mins) { return new Date(d.getTime() + mins * 60000); }
+
+// sUtc–eUtc aralığını minutes dakikalık slotlara böler,
+// ilk slotu bir SONRAKİ 30 dk sınırına yuvarlar (ceil),
+// son slotu da eUtc'yi geçmeyecek şekilde sınırlar.
 function sliceIntoSlots(sUtc, eUtc, minutes = 30) {
   const out = [];
-  for (let t = new Date(sUtc); addMinutes(t, minutes) <= eUtc; t = addMinutes(t, minutes)) {
-    out.push({ start: new Date(t), end: addMinutes(t, minutes) });
+  const stepMs = minutes * 60000;
+
+  // başlangıcı 30 dk grid'ine oturt (örn. 14:17 → 14:30)
+  const startMs = sUtc.getTime();
+  const firstSlotMs = Math.ceil(startMs / stepMs) * stepMs;
+  let t = new Date(firstSlotMs);
+
+  while (addMinutes(t, minutes) <= eUtc) {
+    const end = addMinutes(t, minutes);
+    out.push({ start: new Date(t), end });
+    t = end; // bir sonrakine geç
   }
+
   return out;
 }
+
 function overlap(aStart, aEnd, bStart, bEnd) {
   return (aStart < bEnd) && (aEnd > bStart);
 }
@@ -103,7 +128,7 @@ exports.book = async (req, res, next) => {
     if (!provider_id || !start_local || !end_local)
       return res.status(400).json({ message: 'provider_id, start_local, end_local gerekli' });
 
-    const s = new Date(start_local);
+    const s = new Date(start_local); // TR yerel
     const e = new Date(end_local);
     if (isNaN(s) || isNaN(e) || e <= s)
       return res.status(400).json({ message: 'Geçersiz saat aralığı' });
@@ -118,7 +143,7 @@ exports.book = async (req, res, next) => {
     if (!roleNames.some(r => r === 'instructor' || r === 'student_affairs'))
       return res.status(400).json({ message: 'Seçilen kişi randevu sağlayıcısı değil' });
 
-    // çakışma kontrolü
+    // çakışma kontrolü (UTC saklıyoruz)
     const sUtc = toMySqlDateTime(s);
     const eUtc = toMySqlDateTime(e);
     if (await hasOverlapForProvider(provider_id, sUtc, eUtc))
@@ -132,7 +157,7 @@ exports.book = async (req, res, next) => {
       [provider_id, studentId, sUtc, eUtc, topic || null]
     );
 
-    // e-posta bildirimleri (SMTP yoksa no-op)
+    // e-posta bildirimleri
     const [[prov]] = await pool.query(`SELECT email, username FROM users WHERE id=?`, [provider_id]);
     const [[stud]] = await pool.query(`SELECT email, username FROM users WHERE id=?`, [studentId]);
     const sHuman = s.toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
@@ -202,7 +227,7 @@ exports.cancel = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-// GET /api/appts/providers  → instructor + student_affairs listesi
+// GET /api/appts/providers
 exports.providers = async (_req, res, next) => {
   try {
     const [rows] = await pool.query(`
@@ -221,30 +246,26 @@ exports.providers = async (_req, res, next) => {
 exports.slots = async (req, res, next) => {
   try {
     const providerId = Number(req.query.provider_id);
-    const day = req.query.day; // "YYYY-MM-DD"
+    const day = req.query.day; // "YYYY-MM-DD" (TR yerel günü)
     const minutes = Number(req.query.minutes || 30);
-    const workStartStr = (req.query.work_start || '09:00'); // yerel (TR) mesai başlangıcı
-    const workEndStr   = (req.query.work_end   || '18:00'); // yerel (TR) mesai bitişi
+    const workStartStr = (req.query.work_start || '09:00'); // yerel mesai başlangıcı
+    const workEndStr   = (req.query.work_end   || '18:00'); // yerel mesai bitişi
     if (!providerId || !day) return res.status(400).json({ message: 'provider_id ve day gerekli' });
 
-    // Gün sınırları (UTC)
-    const dayStart = startOfDayUtc(day);
-    const dayEnd   = endOfDayUtc(day);
+    const { startUtc: dayStartUtc, endUtc: dayEndUtc } = localDayToUtcRange(day);
+    const [wsH, wsM] = workStartStr.split(':').map(Number);
+    const [weH, weM] = workEndStr.split(':').map(Number);
 
-    // Europe/Istanbul = UTC+3 (Türkiye sabit +3, DST yok)
-    const TZ_OFFSET_HOURS = 3;
-    const [wsH, wsM] = workStartStr.split(':').map(Number); // örn 09:00
-    const [weH, weM] = workEndStr.split(':').map(Number);   // örn 18:00
-
-    // Mesai penceresini UTC'ye çevir (yerel - 3 saat)
-    const workStartUtc = new Date(dayStart.getTime() + ((wsH - TZ_OFFSET_HOURS) * 60 + wsM) * 60000);
-    const workEndUtc   = new Date(dayStart.getTime() + ((weH - TZ_OFFSET_HOURS) * 60 + weM) * 60000);
+    // Mesai penceresini UTC'ye çevir (dayStartUtc TR gece 00:00'ı temsil ediyor)
+    const workStartUtc = new Date(dayStartUtc.getTime() + (wsH * 60 + wsM) * 60000);
+    const workEndUtc   = new Date(dayStartUtc.getTime() + (weH * 60 + weM) * 60000);
 
     // 1) Bu günde provider’ın uygunluk blokları (gün ile kesişenler)
     const [avails] = await pool.query(
       `SELECT start_utc, end_utc FROM availabilities
        WHERE provider_id=? AND end_utc >= ? AND start_utc <= ?
-       ORDER BY start_utc`, [providerId, dayStart, dayEnd]
+       ORDER BY start_utc`,
+      [providerId, dayStartUtc, dayEndUtc]
     );
 
     // 2) Bu günde provider’ın dolu (booked) randevuları
@@ -252,7 +273,8 @@ exports.slots = async (req, res, next) => {
       `SELECT start_utc, end_utc FROM appointments
        WHERE provider_id=? AND status='booked'
          AND end_utc >= ? AND start_utc <= ?
-       ORDER BY start_utc`, [providerId, dayStart, dayEnd]
+       ORDER BY start_utc`,
+      [providerId, dayStartUtc, dayEndUtc]
     );
 
     // 3) Uygunluk bloklarını (gün sınırı + mesai aralığı) içinde 30 dk slotlara böl
@@ -261,13 +283,12 @@ exports.slots = async (req, res, next) => {
       const s = new Date(a.start_utc);
       const e = new Date(a.end_utc);
 
-      // Önce gün sınırına kırp
-      let sClamped = s < dayStart ? dayStart : s;
-      let eClamped = e > dayEnd   ? dayEnd   : e;
+      // Gün sınırına kırp
+      let sClamped = s < dayStartUtc ? dayStartUtc : s;
+      let eClamped = e > dayEndUtc   ? dayEndUtc   : e;
 
-      // Sonra mesai penceresine kırp
+      // Mesai ile kesişmiyorsa atla
       if (eClamped <= workStartUtc || sClamped >= workEndUtc) {
-        // Mesai ile hiç kesişmiyorsa bu bloğu atla
         continue;
       }
       if (sClamped < workStartUtc) sClamped = workStartUtc;
@@ -284,7 +305,7 @@ exports.slots = async (req, res, next) => {
     // 5) Cevap (ISO UTC)
     res.json(free.map(s => ({
       start_utc: s.start.toISOString(),
-      end_utc:   s.end.toISOString()
+      end_utc:   s.end.toISOString(),
     })));
   } catch (e) { next(e); }
 };
@@ -311,7 +332,8 @@ exports.createMyAvail = async (req, res, next) => {
   try {
     const uid = req.user.id;
     const { start_local, end_local, note } = req.body;
-    const s = new Date(start_local);
+
+    const s = new Date(start_local); // TR yerel
     const e = new Date(end_local);
     if (isNaN(s) || isNaN(e) || e <= s)
       return res.status(400).json({ message: 'Geçersiz saat aralığı' });
@@ -323,7 +345,8 @@ exports.createMyAvail = async (req, res, next) => {
 
     const [r] = await pool.query(
       `INSERT INTO availabilities (provider_id, start_utc, end_utc, note)
-       VALUES (?,?,?,?)`, [uid, sUtc, eUtc, note || null]
+       VALUES (?,?,?,?)`,
+      [uid, sUtc, eUtc, note || null]
     );
     res.status(201).json({ id: r.insertId });
   } catch (e) { next(e); }

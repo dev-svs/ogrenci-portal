@@ -1,12 +1,19 @@
 // server/src/routes/suggestions.routes.js
 const router = require('express').Router();
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { requireAuth, requireRole } = require('../middlewares/auth.middleware');
 const c = require('../controllers/suggestions.controller');
 
-// ---- Multer ayarı (uploads klasörü proje kökünde olsun) ----
+// uploads klasörü
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
     const safeName = file.originalname.replace(/\s+/g, '_');
     cb(null, Date.now() + '_' + safeName);
@@ -15,12 +22,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// ---- Rotalar ----
+// 🔹 Öneri gönderme: HERKES gönderebilsin (auth YOK)
+router.post('/', upload.single('file'), c.create);
 
-// Öğrenci / kullanıcı öneri gönderir
-router.post('/', requireAuth, upload.single('file'), c.create);
-
-// Önerileri listeleme (istersen sadece admin görsün diye requireRole('admin') ekleyebilirsin)
-router.get('/', requireAuth /*, requireRole('admin') */, c.list);
+// 🔹 Önerileri listeleme: sadece admin
+router.get('/', requireAuth, requireRole('admin'), c.list);
 
 module.exports = router;

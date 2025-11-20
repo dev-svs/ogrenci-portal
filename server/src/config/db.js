@@ -8,7 +8,9 @@ const pool = mysql.createPool({
   port:     Number(process.env.DB_PORT) || 3306,   // ← EKLENDİ
   waitForConnections: true,
   connectionLimit: 10,
-  charset: 'utf8mb4_general_ci'
+  charset: 'utf8mb4_general_ci',
+  timezone: 'Z',   // <-- BUNU EKLE: MySQL driver tüm tarihleri UTC kabul etsin
+
 });
 
 module.exports = pool;

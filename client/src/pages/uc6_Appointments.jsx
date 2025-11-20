@@ -3,24 +3,30 @@ import { useEffect, useMemo, useState } from 'react';
 import { Row, Col, Card, Button, Form, Table, Alert, Badge, Spinner } from 'react-bootstrap';
 import api from '../api/axios';
 import { useAuth } from '../auth/AuthContext';
-import { toLocal, parseUtcLike, pad } from '../utils/time'; // 🔹 ortak zaman yardımcıları
+import { toLocal, parseUtcLike, pad } from '../utils/time';
 import { useAutoDismiss } from '../utils/ui';
 
-
-// Gün için 30 dk slotları üret (SABİT: 09:00–18:00)
-function generateDaySlots(day, minutes=30) {
+// Gün için 30 dk slotları üret (yerel: 09:00–18:00)
+function generateDaySlots(day, minutes = 30) {
   if (!day) return [];
-  const sH=9, sM=0, eH=18, eM=0;
+  const sH = 9, sM = 0, eH = 18, eM = 0;
   const slots = [];
   const start = new Date(`${day}T${pad(sH)}:${pad(sM)}:00`);
   const end   = new Date(`${day}T${pad(eH)}:${pad(eM)}:00`);
-  for (let t = new Date(start); t < end; t = new Date(t.getTime() + minutes*60000)) {
-    const t2 = new Date(t.getTime() + minutes*60000);
+
+  for (let t = new Date(start); t < end; t = new Date(t.getTime() + minutes * 60000)) {
+    const t2 = new Date(t.getTime() + minutes * 60000);
+    const hh1 = pad(t.getHours());
+    const mm1 = pad(t.getMinutes());
+    const hh2 = pad(t2.getHours());
+    const mm2 = pad(t2.getMinutes());
+
     slots.push({
-      key: `${pad(t.getHours())}:${pad(t.getMinutes())}`,
-      label: `${pad(t.getHours())}:${pad(t.getMinutes())} - ${pad(t2.getHours())}:${pad(t2.getMinutes())}`,
-      startLocal: `${day}T${pad(t.getHours())}:${pad(t.getMinutes())}`,
-      endLocal:   `${day}T${pad(t2.getHours())}:${pad(t2.getMinutes())}`,
+      key: `${hh1}:${mm1}`,
+      label: `${hh1}:${mm1} - ${hh2}:${mm2}`,
+      // Yerel (TR) string; backend'e böyle gönderiyoruz
+      startLocal: `${day}T${hh1}:${mm1}`,
+      endLocal:   `${day}T${hh2}:${mm2}`,
     });
   }
   return slots;
@@ -60,45 +66,46 @@ export default function UC6() {
 
   /* ---------------------- Data Loaders ---------------------- */
 
-  const loadAppts = async () => {setLoadingList(true);
-  try {
-    const params = { scope, from: from || undefined, to: to || undefined };
-    const { data } = await api.get('/api/appts', { params });
-    setRows(data);
-  } finally {
-    setLoadingList(false);
-  }    
+  const loadAppts = async () => {
+    setLoadingList(true);
+    try {
+      const params = { scope, from: from || undefined, to: to || undefined };
+      const { data } = await api.get('/api/appts', { params });
+      setRows(data || []);
+    } finally {
+      setLoadingList(false);
+    }
   };
 
-  const loadProviders = async () => {setLoadingProviders(true);
-  try {
-    const { data } = await api.get('/api/appts/providers');
-    setProviders(data);
-  } finally {
-    setLoadingProviders(false);
-  }
-    
+  const loadProviders = async () => {
+    setLoadingProviders(true);
+    try {
+      const { data } = await api.get('/api/appts/providers');
+      setProviders(data || []);
+    } finally {
+      setLoadingProviders(false);
+    }
   };
 
   const loadSlots = async () => {
     setAvailable([]);
-  setSelected(null);
-  if (!providerId || !day) return;
-  setLoadingSlots(true);
-  try {
-    const { data } = await api.get('/api/appts/slots', {
-      params: { provider_id: providerId, day, minutes: 30 },
-    });
-    setAvailable(data || []);
-  } finally {
-    setLoadingSlots(false);
-  }
+    setSelected(null);
+    if (!providerId || !day) return;
+    setLoadingSlots(true);
+    try {
+      const { data } = await api.get('/api/appts/slots', {
+        params: { provider_id: providerId, day, minutes: 30 },
+      });
+      setAvailable(data || []);
+    } finally {
+      setLoadingSlots(false);
+    }
   };
 
   const loadMyAvails = async () => {
     if (!isProvider) return;
     const { data } = await api.get('/api/appts/my-avails');
-    setMyAvails(data);
+    setMyAvails(data || []);
   };
 
   useEffect(() => {
@@ -184,33 +191,39 @@ export default function UC6() {
 
   /* ---------------------- Derived ---------------------- */
 
-  // Günlük 30 dk’lık tüm slotlar
+  // Günlük slotlar (yerel)
   const daySlots = useMemo(() => generateDaySlots(day, 30), [day]);
 
-  // Backend’ten gelen uygun slotların set’i (UTC normalize)
+  // Backend’ten gelen uygun slotların UTC ISO set’i
   const availableSet = useMemo(() => {
     const set = new Set();
-    for (const s of available) set.add(parseUtcLike(s.start_utc).toISOString());
+    for (const s of available) {
+      const d = parseUtcLike(s.start_utc);
+      if (d) set.add(d.toISOString()); // örn: 2025-11-22T10:00:00.000Z
+    }
     return set;
   }, [available]);
 
   // daySlots’u “uygun”/“değil” + “seçili” olarak işaretle
   const decoratedSlots = useMemo(() => {
-      const now = new Date();
-      const isToday = day && day === now.toISOString().slice(0,10);
-      return daySlots.map(s => {
-      const iso = new Date(s.startLocal).toISOString(); // local→UTC ISO
+    const now = new Date();
+    const isToday = day && day === now.toISOString().slice(0, 10);
+
+    return daySlots.map((s) => {
+      // s.startLocal: "YYYY-MM-DDTHH:MM" → TR yerel kabul edilir
+      const localDate = new Date(s.startLocal);
+      const iso = localDate.toISOString(); // UTC'ye çevrilmiş ISO
       const isFree = availableSet.has(iso);
       const isSelected = !!selected && selected.startLocal === s.startLocal;
+
       let isPast = false;
-    if (isToday) {
-      // s.startLocal yerel; şimdi ile kıyasla
-      const localStart = new Date(s.startLocal);
-      isPast = localStart.getTime() < now.getTime();
-    }
-    return { ...s, isFree, isSelected, isPast };
+      if (isToday) {
+        isPast = localDate.getTime() < now.getTime();
+      }
+
+      return { ...s, isFree, isSelected, isPast };
     });
-  }, [daySlots, availableSet, selected]);
+  }, [daySlots, availableSet, selected, day]);
 
   /* ---------------------- Render ---------------------- */
 
@@ -279,11 +292,12 @@ export default function UC6() {
                       </td>
                     </tr>
                   ))}
-                    {loadingList ? (
-                                 <tr><td colSpan={8} className="text-center">
-                               <Spinner animation="border" size="sm" /> <span className="ms-2 text-muted">Yükleniyor...</span>
-                              </td></tr>
-                        ) : !rows.length && (
+                  {loadingList ? (
+                    <tr><td colSpan={8} className="text-center">
+                      <Spinner animation="border" size="sm" />{' '}
+                      <span className="ms-2 text-muted">Yükleniyor...</span>
+                    </td></tr>
+                  ) : !rows.length && (
                     <tr><td colSpan={8} className="text-center text-muted">Kayıt yok</td></tr>
                   )}
                 </tbody>
@@ -343,18 +357,20 @@ export default function UC6() {
               {/* Slot grid */}
               <div className="d-flex flex-wrap gap-2">
                 {loadingSlots ? (
-                    <div className="text-muted"><Spinner animation="border" size="sm" /> <span className="ms-2">Slotlar yükleniyor...</span></div>
-                   ) : decoratedSlots.length ? (
+                  <div className="text-muted">
+                    <Spinner animation="border" size="sm" />{' '}
+                    <span className="ms-2">Slotlar yükleniyor...</span>
+                  </div>
+                ) : decoratedSlots.length ? (
                   decoratedSlots.map((s) => {
                     const variant = s.isSelected ? 'primary' : (s.isFree ? 'success' : 'secondary');
-                    const disabled = !s.isFree || !providerId || !day;
-                    const finalDisabled = disabled || s.isPast;
+                    const disabled = !s.isFree || !providerId || !day || s.isPast;
                     return (
                       <Button
                         key={s.key}
                         size="sm"
                         variant={variant}
-                        disabled={finalDisabled}
+                        disabled={disabled}
                         onClick={() => setSelected(s)}
                         title={s.label}
                       >

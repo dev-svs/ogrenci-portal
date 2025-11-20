@@ -1,40 +1,79 @@
-import { useState } from "react";
-import { Card, Form, Button, Alert, Row, Col } from "react-bootstrap";
-import api from "../api/axios";
+// client/src/pages/uc3_Suggestions.jsx
+import { useState, useRef } from 'react';
+import { Card, Form, Button, Alert, Row, Col } from 'react-bootstrap';
+import api from '../api/axios';
+import { useAutoDismiss } from '../utils/ui';
 
-export default function Suggestions() {
-  const [category, setCategory] = useState("GENEL");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+
+
+export default function UC3_Suggestions() {
+  const [category, setCategory] = useState('GENEL');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [file, setFile] = useState(null);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const [anon, setAnon] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [msg, setMsg] = useState('');
+  useAutoDismiss(msg, setMsg, 3000); // 3 saniye sonra mesajı temizle
+
+
+  // file input'a direkt erişmek için ref
+  const fileInputRef = useRef(null);
 
   const send = async (e) => {
     e.preventDefault();
-    const form = new FormData();
+    setMsg('');
 
-    form.append("category", category);
-    form.append("title", title);
-    form.append("description", description);
-    form.append("file", file);
-    form.append("email", email);
-    form.append("is_anonymous", anon ? 1 : 0);
+    // basit validation
+    if (!title.trim() || !description.trim()) {
+      setMsg('Başlık ve açıklama zorunludur.');
+      return;
+    }
+
+    const form = new FormData();
+    form.append('category', category);
+    form.append('title', title);
+    form.append('description', description);
+    form.append('is_anonymous', anon ? 1 : 0);
+
+    // anonimse email göndermiyoruz
+    if (!anon && email.trim()) {
+      form.append('email', email.trim());
+    }
+
+    // 🔑 sadece gerçekten dosya varsa append et
+    if (file) {
+      form.append('file', file);
+    }
 
     try {
-      await api.post("/api/suggestions", form, {
-        headers: { "Content-Type": "multipart/form-data" },
+      await api.post('/api/suggestions', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setMsg("Öneriniz başarıyla gönderildi.");
-      setTitle("");
-      setDescription("");
-      setFile(null);
-      setEmail("");
+
+      setMsg('Öneriniz başarıyla gönderildi.');
+
+      // formu temizle
+      setTitle('');
+      setDescription('');
+      setEmail('');
       setAnon(false);
+      setFile(null);
+
+      // input[type=file] değerini de temizle ki
+      // aynı dosyayı seçince bile onChange tekrar çalışsın
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (err) {
-      setMsg("Gönderilemedi.");
+      console.error(err);
+      setMsg(err.response?.data?.message || 'Gönderilemedi.');
     }
+  };
+
+  const handleFileChange = (e) => {
+    const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    setFile(f);
   };
 
   return (
@@ -43,7 +82,7 @@ export default function Suggestions() {
         <Card.Title>Geri Bildirim / Öneri Gönder</Card.Title>
 
         {msg && (
-          <Alert variant="info" onClose={() => setMsg("")} dismissible>
+          <Alert variant="info" onClose={() => setMsg('')} dismissible>
             {msg}
           </Alert>
         )}
@@ -57,8 +96,8 @@ export default function Suggestions() {
                 onChange={(e) => setCategory(e.target.value)}
               >
                 <option value="GENEL">Genel</option>
-                <option value="ONERI">Öneri & İyileştirme</option>
-                <option value="TEKNIK">Teknik Sorun / Hata</option>
+                <option value="ONERI">Öneri &amp; İyileştirme</option>
+                <option value="TEKNIK">Teknik Sorun / Hata Bildirimi</option>
               </Form.Select>
             </Col>
 
@@ -92,12 +131,13 @@ export default function Suggestions() {
               <Form.Label>Dosya (opsiyonel)</Form.Label>
               <Form.Control
                 type="file"
-                onChange={(e) => setFile(e.target.files[0])}
+                ref={fileInputRef}
+                onChange={handleFileChange}
               />
             </Col>
 
             <Col md={6}>
-              <Form.Label>E-posta (anonim değilse)</Form.Label>
+              <Form.Label>E-posta (isteğe bağlı)</Form.Label>
               <Form.Control
                 value={email}
                 disabled={anon}
@@ -112,18 +152,30 @@ export default function Suggestions() {
             type="checkbox"
             label="Anonim Gönder"
             checked={anon}
-            onChange={(e) => setAnon(e.target.checked)}
+            onChange={(e) => {
+              const v = e.target.checked;
+              setAnon(v);
+              if (v) {
+                // anonim seçilince email'i de temizle
+                setEmail('');
+              }
+            }}
           />
 
           <div className="d-flex gap-2">
             <Button type="submit">Öneriyi Gönder</Button>
             <Button
               variant="secondary"
+              type="button"
               onClick={() => {
-                setTitle("");
-                setDescription("");
-                setEmail("");
+                setTitle('');
+                setDescription('');
+                setEmail('');
+                setAnon(false);
                 setFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
               }}
             >
               Temizle
