@@ -1,41 +1,63 @@
 // client/src/pages/uc5_CounselorMail.jsx
 import { useEffect, useState } from 'react';
-import { Row, Col, Card, Table, Button, Alert, Modal, Form } from 'react-bootstrap';
+import {
+  Row,
+  Col,
+  Card,
+  Button,
+  Form,
+  Table,
+  Alert,
+  Modal,
+} from 'react-bootstrap';
 import api from '../api/axios';
 import { useAuth } from '../auth/AuthContext';
+import { useAutoDismiss } from '../utils/ui';
+
+// "2025-11-21 00:13:43" → "21.11.2025 00:13"
+function formatCreatedAt(value) {
+  if (!value) return '-';
+  // beklenen format: "YYYY-MM-DD HH:MM:SS"
+  const s = String(value);
+
+  const datePart = s.slice(0, 10);     // "2025-11-21"
+  const timePart = s.slice(11, 16);    // "00:13"
+
+  const [y, m, d] = datePart.split('-');
+  if (!y || !m || !d) return s;        // beklediğimiz gibi değilse aynen göster
+
+  return `${d}.${m}.${y} ${timePart}`;
+}
 
 export default function UC5_CounselorMail() {
   const { user } = useAuth();
-  const isCounselor = user?.roles?.includes('counselor');
+  const roles = user?.roles || [];
+  const isCounselor = roles.includes('counselor');
 
-  // Ortak state
+  const [counselors, setCounselors] = useState([]);
   const [threads, setThreads] = useState([]);
   const [msg, setMsg] = useState('');
-  const [show, setShow] = useState(false);
-  const [view, setView] = useState(null);
+  useAutoDismiss(msg, setMsg, 3000);
 
-  // Sadece ÖĞRENCİ için kullanılan state’ler
-  const [counselors, setCounselors] = useState([]);
+  // compose (öğrenci tarafı)
   const [cId, setCId] = useState('');
   const [subject, setSubj] = useState('');
   const [body, setBody] = useState('');
 
+  // view (modal)
+  const [show, setShow] = useState(false);
+  const [view, setView] = useState(null);
+
   const load = async () => {
     setMsg('');
     try {
-      if (isCounselor) {
-        // Danışman: sadece kendi olduğu mesajları çekiyoruz
-        const { data } = await api.get('/api/counsel/threads');
-        setThreads(data);
-      } else {
-        // Öğrenci: hem danışman listesi hem kendi mesajları
-        const [cs, th] = await Promise.all([
-          api.get('/api/counsel/counselors'),
-          api.get('/api/counsel/threads'),
-        ]);
-        setCounselors(cs.data);
-        setThreads(th.data);
-      }
+      // Danışman listesi + tüm ilgili mesajlar (hem öğrenci hem danışman için)
+      const [cs, th] = await Promise.all([
+        api.get('/api/counsel/counselors'),
+        api.get('/api/counsel/threads'),
+      ]);
+      setCounselors(cs.data || []);
+      setThreads(th.data || []);
     } catch (err) {
       setMsg(err.response?.data?.message || 'Mesajlar yüklenemedi');
     }
@@ -43,21 +65,8 @@ export default function UC5_CounselorMail() {
 
   useEffect(() => {
     load().catch(() => {});
-    // isCounselor değiştiğinde (farklı kullanıcıyla login) tekrar çalışsın:
-  }, [isCounselor]);
+  }, []);
 
-  const open = async (id) => {
-    setMsg('');
-    try {
-      const { data } = await api.get(`/api/counsel/message/${id}`);
-      setView(data);
-      setShow(true);
-    } catch (err) {
-      setMsg(err.response?.data?.message || 'Mesaj yüklenemedi');
-    }
-  };
-
-  // Öğrenci → danışmana mesaj gönder
   const send = async (e) => {
     e.preventDefault();
     setMsg('');
@@ -77,16 +86,49 @@ export default function UC5_CounselorMail() {
     }
   };
 
-  // Danışman tarafında sadece bana gelenleri göstermek için filtre
-  const myThreads = isCounselor
-    ? threads.filter((t) => t.counselor_id === user?.id)
-    : threads; // öğrencide backend zaten kendi mesajlarını veriyor
+  const open = async (id) => {
+    setMsg('');
+    try {
+      const { data } = await api.get(`/api/counsel/message/${id}`);
+      setView(data);
+      setShow(true);
+    } catch (err) {
+      setMsg(err.response?.data?.message || 'Mesaj yüklenemedi');
+    }
+  };
+
+  // öğrenci için kendi mesajları
+  const studentThreads = threads.filter((t) => t.student_id === user?.id);
+
+  // danışman için kendisine gelenler
+  const counselorThreads = threads.filter((t) => t.counselor_id === user?.id);
+
+  // modal içindeki "Kimden" yazısını role göre düzgün gösterelim
+  const renderFromInfo = () => {
+    if (!view) return '';
+    const baseDate = formatCreatedAt(view.created_at);
+
+    if (view.from_role === 'student') {
+      // mesaj öğrenciden geldiyse
+      if (isCounselor) {
+        return `Gönderen: ${view.student_name} (öğrenci) · ${baseDate}`;
+      }
+      // öğrenci kendi mesajına bakıyorsa
+      return `Gönderen: Ben · ${baseDate}`;
+    } else {
+      // mesaj danışmandan geldiyse
+      if (isCounselor) {
+        return `Gönderen: Ben · ${baseDate}`;
+      }
+      return `Gönderen: ${view.counselor_name} · ${baseDate}`;
+    }
+  };
 
   return (
     <div>
       {msg && <Alert variant="info">{msg}</Alert>}
 
-      {/* ====== ÖĞRENCİ EKRANI ====== */}
+      {/* ÖĞRENCİ GÖRÜNÜMÜ: Mesaj Gönder + Mesajlarım */}
       {!isCounselor && (
         <Row className="g-3">
           <Col md={5}>
@@ -131,8 +173,8 @@ export default function UC5_CounselorMail() {
                   <Button type="submit">Gönder</Button>
                 </Form>
                 <div className="small text-muted mt-2">
-                  Mesaj içeriği sistemde şifreli saklanır. E-postada içerik paylaşılmaz;
-                  sadece bildirim gider.
+                  Mesaj içeriği sistemde şifreli saklanır. E-postada içerik
+                  paylaşılmaz; sadece bildirim gider.
                 </div>
               </Card.Body>
             </Card>
@@ -149,19 +191,19 @@ export default function UC5_CounselorMail() {
                       <th>Konu</th>
                       <th>Danışman</th>
                       <th>Kimden</th>
-                      <th>Tarih - Saat</th>
+                      <th>Tarih</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {myThreads.map((t) => (
+                    {studentThreads.map((t) => (
                       <tr key={t.id}>
                         <td>{t.id}</td>
                         <td>{t.subject}</td>
                         <td>{t.counselor_name}</td>
                         <td>{t.from_role === 'student' ? 'Ben' : 'Danışman'}</td>
                         <td>
-                          {t.created_at}
+                          {formatCreatedAt(t.created_at)}
                         </td>
                         <td className="text-end">
                           <Button
@@ -174,7 +216,7 @@ export default function UC5_CounselorMail() {
                         </td>
                       </tr>
                     ))}
-                    {!myThreads.length && (
+                    {!studentThreads.length && (
                       <tr>
                         <td colSpan={6} className="text-center text-muted">
                           Mesaj yok
@@ -189,7 +231,7 @@ export default function UC5_CounselorMail() {
         </Row>
       )}
 
-      {/* ====== DANIŞMAN EKRANI ====== */}
+      {/* DANIŞMAN GÖRÜNÜMÜ: Gelen Mesajlar */}
       {isCounselor && (
         <Card>
           <Card.Body>
@@ -206,13 +248,13 @@ export default function UC5_CounselorMail() {
                 </tr>
               </thead>
               <tbody>
-                {myThreads.map((t) => (
+                {counselorThreads.map((t) => (
                   <tr key={t.id}>
                     <td>{t.id}</td>
                     <td>{t.subject}</td>
                     <td>{t.student_name}</td>
                     <td>{t.from_role === 'student' ? 'Öğrenci' : 'Ben'}</td>
-                    <td>{t.created_at}</td>
+                    <td>{formatCreatedAt(t.created_at)}</td>
                     <td className="text-end">
                       <Button
                         size="sm"
@@ -224,7 +266,7 @@ export default function UC5_CounselorMail() {
                     </td>
                   </tr>
                 ))}
-                {!myThreads.length && (
+                {!counselorThreads.length && (
                   <tr>
                     <td colSpan={6} className="text-center text-muted">
                       Mesaj yok
@@ -245,13 +287,7 @@ export default function UC5_CounselorMail() {
         <Modal.Body>
           {view ? (
             <>
-              <div className="mb-2 text-muted">
-                {view.from_role === 'student'
-                  ? `Gönderen: ${view.student_name} (öğrenci)`
-                  : `Gönderen: Ben`}
-                {' · '}
-                {view.created_at}
-              </div>
+              <div className="mb-2 text-muted">{renderFromInfo()}</div>
               <pre style={{ whiteSpace: 'pre-wrap' }}>{view.body}</pre>
             </>
           ) : (

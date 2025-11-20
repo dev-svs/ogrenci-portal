@@ -45,7 +45,7 @@ export default function TopNav() {
             <Nav.Link as={NavLink} to="/dashboard/uc1">Etkinlikler</Nav.Link>
             <Nav.Link as={NavLink} to="/dashboard/uc2">Kulüpler</Nav.Link>
             <Nav.Link as={NavLink} to="/dashboard/uc3">Öneriler</Nav.Link>
-            <Nav.Link as={NavLink} to="/dashboard/uc5">Danışman</Nav.Link>
+            <Nav.Link as={NavLink} to="/dashboard/uc5">Danışman İletişimi</Nav.Link>
             <Nav.Link as={NavLink} to="/dashboard/uc6">Randevular</Nav.Link>
             <Nav.Link 
                 as={NavLink} 
